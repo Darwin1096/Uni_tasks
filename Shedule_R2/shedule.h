@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <list>
 #include <map>
+#include <cctype>
 #include <memory> // Нужно для std::unique_ptr
 
 // ============ TYPEDEFS ============
@@ -228,10 +229,10 @@ bool match(const Schedule_unit& unit, const Database& db, const SearchConditions
 
 Command parse(const std::string& query);
 
-void generateTestData(int numLessonsPerDay = 4,
-                      int numAuditories = 10, int numGroups = 10,
-                      int numTeachers = 8, int numSubjects = 12,
-                      double occupancyRate = 0.6);
+void generateTestData(int numLessonsPerDay,
+                      int numAuditories, int numGroups,
+                      int numTeachers, int numSubjects,
+                      double occupancyRate);
 
 void printSchedule(const std::vector<Schedule_unit>& schedule, 
                    const Database& db,

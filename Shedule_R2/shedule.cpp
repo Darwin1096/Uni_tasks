@@ -7,6 +7,7 @@
 #include <set>
 #include <tuple>
 #include <cctype>
+#include <stdexcept>   // для std::invalid_argument (std::stoi может бросить)
 
 // ============ Cond ============
 Cond::Cond() : field(GROUP), relation(EQ), strValue(""), intValue(0) {}
@@ -150,6 +151,7 @@ bool Database::loadFromFile(const std::string& filename) {
         std::string day, auditory, subject, teacher;
         int lessonNum, group;
         
+        // Порядок полей: день, номер пары, аудитория, предмет, преподаватель, группа
         if (!(iss >> day >> lessonNum >> auditory >> subject >> teacher >> group)) {
             continue;
         }
@@ -428,40 +430,6 @@ std::vector<Auditory> Database::getFreeAuditories(const DateTime& dt) const {
     return free;
 }
 
-/*bool Database::checkCollision(const std::string& teacher, const DateTime& dt) const {
-    int tIdx = findTimeIndex(dt);
-    if (tIdx < 0) return false;
-    
-    auto it = teacherIndex.find(teacher);
-    if (it != teacherIndex.end()) {
-        for (const auto& pos : it->second.positions) {
-            if (pos.timeIndex == tIdx) return true;
-        }
-    }
-    return false;
-}
-
-bool Database::checkCollision(int group, const DateTime& dt) const {
-    int tIdx = findTimeIndex(dt);
-    if (tIdx < 0) return false;
-    
-    auto it = groupIndex.find(group);
-    if (it != groupIndex.end()) {
-        for (const auto& pos : it->second.positions) {
-            if (pos.timeIndex == tIdx) return true;
-        }
-    }
-    return false;
-}
-
-bool Database::checkCollision(const Auditory& auditory, const DateTime& dt) const {
-    int tIdx = findTimeIndex(dt);
-    int aIdx = findAuditoryIndex(auditory);
-    if (tIdx < 0 || aIdx < 0) return false;
-    return hasCollision(tIdx, aIdx);
-} 
-*/
-
 const std::vector<DateTime>& Database::getTimes() const { return times; }
 const std::vector<Auditory>& Database::getAuditories() const { return auditories; }
 SessionManager& Database::getSessionManager() { return sessionManager; }
@@ -534,22 +502,130 @@ bool match(const Schedule_unit& unit, const Database& db, const SearchConditions
     return true;
 }
 
+// ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ПАРСЕРА ============
+namespace {
+
+    Cond::Field parseField(const std::string& token) {
+        static const std::map<std::string, Cond::Field> fieldMap = {
+            {"GROUP", Cond::GROUP},
+            {"TEACHER", Cond::TEACHER},
+            {"SUBJECT", Cond::SUBJECT},
+            {"AUDITORY", Cond::AUDITORY},
+            {"DATE", Cond::DATE},
+            {"DAY", Cond::DAY},
+            {"TIME", Cond::TIME},
+            {"LESSON_NUM", Cond::LESSON_NUM}
+        };
+        auto it = fieldMap.find(token);
+        if (it != fieldMap.end()) return it->second;
+        return Cond::GROUP;   // поле по умолчанию при ошибке
+    }
+
+    Cond::Relation parseRelation(const std::string& token) {
+        if (token == "==") return Cond::EQ;
+        if (token == "!=") return Cond::NE;
+        if (token == "<")  return Cond::LT;
+        if (token == ">")  return Cond::GT;
+        if (token == "<=") return Cond::LE;
+        if (token == ">=") return Cond::GE;
+        if (token == "CONTAINS") return Cond::CONTAINS;
+        return Cond::EQ;   // по умолчанию
+    }
+
+    bool isNumericField(Cond::Field field) {
+        return field == Cond::GROUP || field == Cond::TIME || field == Cond::LESSON_NUM;
+    }
+
+    std::string toUpper(const std::string& s) {
+        std::string res = s;
+        for (auto& c : res)
+            c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        return res;
+    }
+} // namespace
+
 // ============ parse function ============
 Command parse(const std::string& query) {
     Command cmd;
     std::istringstream iss(query);
-    std::string command;
-    iss >> command;
-    
-    if (command == "ADD") cmd.cmd = ADD;
+    std::string token;
+
+    if (!(iss >> token)) return cmd;                   // пустая строка
+    std::string command = toUpper(token);
+
+    // Определяем тип команды
+    if (command == "ADD")           cmd.cmd = ADD;
     else if (command == "DELETE" || command == "REMOVE") cmd.cmd = REMOVE;
-    else if (command == "SELECT") cmd.cmd = SELECT;
+    else if (command == "SELECT")   cmd.cmd = SELECT;
     else if (command == "RESELECT") cmd.cmd = RESELECT;
-    else if (command == "SAVE") cmd.cmd = SAVE;
-    else if (command == "LOAD") cmd.cmd = LOAD;
-    else if (command == "PRINT") cmd.cmd = PRINT;
-    
-    // Simplified: full parsing would require detailed query language specification
+    else if (command == "SAVE")     cmd.cmd = SAVE;
+    else if (command == "LOAD")     cmd.cmd = LOAD;
+    else if (command == "PRINT")    cmd.cmd = PRINT;
+
+    // Парсим условия для SELECT / RESELECT / REMOVE
+    if (cmd.cmd == SELECT || cmd.cmd == RESELECT || cmd.cmd == REMOVE) {
+        while (iss >> token) {
+            std::string upperToken = toUpper(token);
+            if (upperToken == "AND") continue;   // пропускаем связку AND
+
+            Cond cond;
+            cond.field = parseField(upperToken);
+
+            std::string relToken;
+            if (!(iss >> relToken)) break;
+            cond.relation = parseRelation(relToken);
+
+            std::string value;
+            if (!(iss >> value)) break;
+
+            if (isNumericField(cond.field)) {
+                try {
+                    cond.intValue = std::stoi(value);
+                } catch (...) {
+                    cond.intValue = 0;            // при ошибке оставляем 0
+                }
+                cond.strValue = value;
+            } else {
+                cond.strValue = value;
+                cond.intValue = 0;
+            }
+
+            if (cmd.cmd == REMOVE)
+                cmd.removeConditions.push_back(cond);
+            else
+                cmd.conditions.push_back(cond);
+        }
+    }
+    // Парсим PRINT [SORT BY field ASC/DESC] [field1 field2 ...]
+    else if (cmd.cmd == PRINT) {
+        while (iss >> token) {
+            std::string upperToken = toUpper(token);
+            if (upperToken == "SORT") {
+                std::string by;
+                if (!(iss >> by) || toUpper(by) != "BY") break;
+                std::string fieldName;
+                if (!(iss >> fieldName)) break;
+                cmd.sortFieldVal = parseField(toUpper(fieldName));
+                cmd.hasSortField = true;
+
+                std::string order;
+                if (iss >> order) {
+                    std::string upperOrder = toUpper(order);
+                    if (upperOrder == "ASC" || upperOrder == "DESC") {
+                        cmd.sortOrder = (upperOrder == "DESC" ? "desc" : "asc");
+                    } else {
+                        // не ASC/DESC – оставляем asc по умолчанию,
+                        // но токен уже считан, его «вернуть» сложно, поэтому просто игнорируем
+                        cmd.sortOrder = "asc";
+                    }
+                }
+            } else {
+                // произвольное поле для вывода
+                cmd.printFields.push_back(parseField(upperToken));
+            }
+        }
+    }
+
     return cmd;
 }
 
