@@ -1,0 +1,15 @@
+Monday Teacher_5 Subject_10 Room_7 5 1
+Monday Teacher_6 Subject_12 Room_1 5 2
+Monday Teacher_8 Subject_8 Room_8 10 4
+Tuesday Teacher_2 Subject_8 Room_6 9 1
+Tuesday Teacher_5 Subject_4 Room_8 5 3
+Tuesday Teacher_5 Subject_3 Room_4 8 4
+Wednesday Teacher_4 Subject_7 Room_5 8 1
+Wednesday Teacher_4 Subject_2 Room_6 9 4
+Thursday Teacher_1 Subject_10 Room_4 6 1
+Thursday Teacher_7 Subject_7 Room_3 2 3
+Friday Teacher_3 Subject_3 Room_7 5 3
+Friday Teacher_1 Subject_5 Room_5 8 4
+Saturday Teacher_2 Subject_5 Room_1 10 1
+Saturday Teacher_8 Subject_12 Room_5 2 2
+Saturday Teacher_6 Subject_10 Room_1 5 4

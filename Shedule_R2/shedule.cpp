@@ -428,7 +428,7 @@ std::vector<Auditory> Database::getFreeAuditories(const DateTime& dt) const {
     return free;
 }
 
-bool Database::checkCollision(const std::string& teacher, const DateTime& dt) const {
+/*bool Database::checkCollision(const std::string& teacher, const DateTime& dt) const {
     int tIdx = findTimeIndex(dt);
     if (tIdx < 0) return false;
     
@@ -459,7 +459,8 @@ bool Database::checkCollision(const Auditory& auditory, const DateTime& dt) cons
     int aIdx = findAuditoryIndex(auditory);
     if (tIdx < 0 || aIdx < 0) return false;
     return hasCollision(tIdx, aIdx);
-}
+} 
+*/
 
 const std::vector<DateTime>& Database::getTimes() const { return times; }
 const std::vector<Auditory>& Database::getAuditories() const { return auditories; }
@@ -550,44 +551,6 @@ Command parse(const std::string& query) {
     
     // Simplified: full parsing would require detailed query language specification
     return cmd;
-}
-
-// ============ generateTestData function ============
-void generateTestData(int numLessonsPerDay, int numAuditories, int numGroups,
-                      int numTeachers, int numSubjects, double occupancyRate) {
-    std::ofstream file("test_data.txt");
-    if (!file.is_open()) return;
-    
-    std::vector<std::string> days = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday"};
-    std::vector<std::string> teachers, subjects;
-    
-    for (int i = 0; i < numTeachers; ++i) teachers.push_back("Teacher" + std::to_string(i + 1));
-    for (int i = 0; i < numSubjects; ++i) subjects.push_back("Subject" + std::to_string(i + 1));
-    
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<> audDist(1, numAuditories);
-    std::uniform_int_distribution<> teachDist(0, numTeachers - 1);
-    std::uniform_int_distribution<> subjDist(0, numSubjects - 1);
-    std::uniform_int_distribution<> groupDist(101, 100 + numGroups);
-    std::uniform_real_distribution<> probDist(0.0, 1.0);
-    
-    for (const auto& day : days) {
-        for (int lesson = 1; lesson <= numLessonsPerDay; ++lesson) {
-            for (int aud = 1; aud <= numAuditories; ++aud) {
-                if (probDist(gen) < occupancyRate) {
-                    std::string auditory = "Aud_" + std::to_string(aud);
-                    std::string subject = subjects[subjDist(gen)];
-                    std::string teacher = teachers[teachDist(gen)];
-                    int group = groupDist(gen);
-                    
-                    file << day << " " << lesson << " " << auditory << " "
-                         << subject << " " << teacher << " " << group << "\n";
-                }
-            }
-        }
-    }
-    file.close();
 }
 
 // ============ printSchedule function ============

@@ -211,9 +211,9 @@ public:
     
     std::vector<Auditory> getFreeAuditories(const DateTime& dt) const;
     
-    bool checkCollision(const std::string& teacher, const DateTime& dt) const;
-    bool checkCollision(int group, const DateTime& dt) const;
-    bool checkCollision(const Auditory& auditory, const DateTime& dt) const;
+   // bool checkCollision(const std::string& teacher, const DateTime& dt) const;
+    //bool checkCollision(int group, const DateTime& dt) const;
+    //bool checkCollision(const Auditory& auditory, const DateTime& dt) const;
     
     const std::vector<DateTime>& getTimes() const;
     const std::vector<Auditory>& getAuditories() const;
