@@ -1,189 +1,140 @@
-#pragma once
-
 #include <vector>
 #include <string>
 #include <unordered_map>
 #include <algorithm>
 #include <list>
 #include <map>
-#include <iostream>
-#include <sstream>
 
-enum class CommandType { ADD, DELETE, SELECT, SAVE, LOAD, PRINT };
-enum class Field { GROUP, TEACHER, SUBJECT, AUDITORY, DATE, TIME };
-enum class Relation { LT, GT, EQ };
+typedef enum CommandType { ADD, DELETE, SELECT, SAVE, LOAD, PRINT};
+typedef enum Field { GROUP, TEACHER, SUBJECT, AUDITORY, DATE, TIME };
+typedef enum Relation {LT, GT, EQ};
+typedef std::list<Cond> SearchConditions;
+typedef int UserID;
+typedef std::string Teacher_name;
+typedef std::string Subject_name;
+typedef std::string Auditory;
 
-using UserID = int;
-using Teacher_name = std::string;
-using Subject_name = std::string;
-using Auditory = std::string;
 
-// Структура условия поиска
-// В C++14 нет std::variant, поэтому храним значение как строку
-struct Cond {
+//Надо дописать, пока хз как
+struct Cond{ 
     Field field;
     Relation relation;
-    std::string value_str; // Храним всё как строку
-
-    // Хелперы для получения значения в нужном типе
-    int getInt() const {
-        return std::stoi(value_str);
-    }
-    
-    double getDouble() const {
-        return std::stod(value_str);
-    }
-    
-    const std::string& getString() const {
-        return value_str;
-    }
+    union {
+        int i;
+        std::string s;
+        double d;
+    } value;
 };
-
-using SearchConditions = std::list<Cond>;
 
 struct Command {
     CommandType cmd;
     SearchConditions conditions;
 };
+Command parse(const std::string& query); //Собственно парсер 
 
-Command parse(const std::string& query);
 
+//Время
 struct DateTime {
-    std::string weekday;
-    int lesson_num;
-
-    std::string toString() const {
-        return weekday + "_" + std::to_string(lesson_num);
-    }
-
-    bool operator==(const DateTime& other) const {
-        return weekday == other.weekday && lesson_num == other.lesson_num;
-    }
-
-    bool operator<(const DateTime& other) const {
-        if (weekday != other.weekday) return weekday < other.weekday;
-        return lesson_num < other.lesson_num;
-    }
+    std::string weekday; //День недели
+    int lesson_num; //Номер пары 
+    std::string toString() const;
+    bool operator==(const DateTime& other) const;
+    bool operator<(const DateTime& other) const;
 };
 
-struct Schedule_unit {
+struct Schedule_unit{
     std::string subject;
     std::string teacher;
-    int group;
-    DateTime dt;
-    Auditory auditory;
-
-    Schedule_unit() : group(0) {}
-    
-    Schedule_unit(const std::string& s, const std::string& t, int g, const DateTime& d, const Auditory& a)
-        : subject(s), teacher(t), group(g), dt(d), auditory(a) {}
+    int group = 0;
+    DateTime& dt;  //Можно вместо указателей сделать ссылки
+    Auditory& auditory;  //Можно вместо указателей сделать ссылки
 };
 
-struct Indexes {
-    int timeIndex;
-    int auditoryIndex;
-
+//Структура для работы с матрицей
+struct Indexes{
+    int timeIndex;      
+    int auditoryIndex;  
+    
     Indexes(int t = -1, int a = -1) : timeIndex(t), auditoryIndex(a) {}
-
+    
     bool operator==(const Indexes& other) const {
         return timeIndex == other.timeIndex && auditoryIndex == other.auditoryIndex;
     }
 };
 
-struct TeacherSchedule {
-    std::vector<Indexes> positions;
 
-    void addPosition(const Indexes& position) {
-        positions.push_back(position);
-    }
-    void clear() {
-        positions.clear();
-    }
-    bool isEmpty() const {
-        return positions.empty();
-    }
-    size_t size() const {
-        return positions.size();
-    }
+//Структура для хранения расписания преподавателя
+struct TeacherSchedule{
+    std::vector<Indexes> positions;    
+    void addPosition(const Indexes& position);
+    void clear();
+    bool isEmpty() const;
+    size_t size() const;
 };
 
-struct SubjectSchedule {
-    std::vector<Indexes> positions;
 
-    void addPosition(const Indexes& position) {
-        positions.push_back(position);
-    }
-    void clear() {
-        positions.clear();
-    }
-    bool isEmpty() const {
-        return positions.empty();
-    }
-    size_t size() const {
-        return positions.size();
-    }
+//Структура для хранения расписания предмета
+struct SubjectSchedule{
+    std::vector<Indexes> positions;  
+    void addPosition(const Indexes& position);
+    void clear();
+    bool isEmpty() const;
+    size_t size() const;
 };
 
-struct SelectedItems {
+
+//Структура для хранения выбранных элементов
+struct SelectedItems{
     std::vector<Indexes> selected_positions;
-
-    void clear() { selected_positions.clear(); }
-    bool isEmpty() const { return selected_positions.empty(); }
+    void clear();
+    bool isEmpty() const;
 };
 
-struct Session {
-    SelectedItems selected_items;
 
-    void addSelectedTimes(UserID userId, const std::vector<DateTime>& times);
-    void addSelectedUnits(UserID userId, const std::vector<Schedule_unit>& units);
+//Сессия одного пользователя
+struct Session{
+    SelectedItems SelectedItems;
+    //Надо подумать об аргументах этих функций и вообще о том, что хочется делать 
+    void addSelectedTimes(int userId, const std::vector<DateTime>& times); 
+    void addSelectedUnits(int userId, const std::vector<Schedule_unit>& units);
 };
 
+//Функция match 
 bool match(const Schedule_unit& unit, const SearchConditions& conditions);
 
-class Database {
+
+
+class Database{
 private:
-    std::vector<DateTime> times;
-    std::vector<Auditory> auditories;
+    std::vector<DateTime> times;     //При получении данных их надо будет отсортировать 
+    std::vector<Auditory> auditories;    //встроенной сортировкой 
     std::vector<std::vector<Schedule_unit>> data;
 
-    class Sessions {
-    private:
-        std::map<UserID, Session> userSessions;
-    public:
-        Sessions() = default;
-
-        Session& getSession(UserID id) {
-            return userSessions[id];
-        }
-
-        bool hasSession(UserID id) const {
-            return userSessions.find(id) != userSessions.end();
-        }
-
-        void removeSession(UserID id) {
-            userSessions.erase(id);
-        }
+    //Класс Sessions должен быть элементом Database, это отображение из айди в сессию
+    class Sessions{
+        private:
+        std::map<UserID, Session> userSessions; //Контейнер Id - Selected
+        public:
+        Sessions();
     };
-
-    Sessions sessionsManager;
-
-    std::unordered_map<Teacher_name, TeacherSchedule> teacherIndex;
-    std::unordered_map<Subject_name, SubjectSchedule> subjectIndex;
-
+    
+    //Хэш-множества
+    std::unordered_map<Teacher_name, TeacherSchedule> teacherIndex; 
+    std::unordered_map<Subject_name, SubjectSchedule> subjectIndex; 
 public:
     Database();
-    Sessions& getSessionsManager() { return sessionsManager; }
-    const Sessions& getSessionsManager() const { return sessionsManager; }
-    bool loadFromFile(const std::string& filename = "Data.txt");
-    bool saveToFile(const std::string& filename = "Data.txt") const;
+    bool loadFromFile(); // Data.txt
+    bool saveToFile() const; //Есть известный файл куда записывать
 
-    bool execute(UserID userId, const Command& cmd);
-
-    const std::vector<DateTime>& getTimes() const { return times; }
-    const std::vector<Auditory>& getAuditories() const { return auditories; }
+    //Должна быть функция match вне каких-то классов, которая проверяет,
+    //что Shedule_unit подходит под распаршенные условия и в execute будут циклы по матрице,
+    // где каждый Shedule_unit будет проверяться
+    bool execute(int userId, const Command& cmd);
 };
 
+//Название файла куда будет записываться, уже известно (РЕАЛИЗОВАНО)
 void generateTestData(int numLessonsPerDay = 4,
                       int numAuditories = 10, int numGroups = 10,
                       int numTeachers = 8, int numSubjects = 12,
                       double occupancyRate = 0.6);
+
