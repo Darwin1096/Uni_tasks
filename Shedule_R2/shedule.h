@@ -172,6 +172,8 @@ private:
 
 public:
     Database();
+    Sessions& getSessionsManager() { return sessionsManager; }
+    const Sessions& getSessionsManager() const { return sessionsManager; }
     bool loadFromFile(const std::string& filename = "Data.txt");
     bool saveToFile(const std::string& filename = "Data.txt") const;
 
