@@ -1,4 +1,4 @@
-// schedule.cpp
+// shedule.cpp
 #include "shedule.h"
 #include <fstream>
 #include <sstream>
@@ -7,14 +7,14 @@
 #include <set>
 #include <tuple>
 #include <cctype>
-#include <stdexcept>   // для std::invalid_argument (std::stoi может бросить)
+#include <stdexcept>
+#include <iomanip>
 
-// ============ Cond ============
+/* ======================== Cond ======================== */
 Cond::Cond() : field(GROUP), relation(EQ), strValue(""), intValue(0) {}
 
-// ============ DateTime ============
+/* ======================== DateTime ======================== */
 DateTime::DateTime() : weekday(""), lesson_num(0) {}
-
 DateTime::DateTime(const std::string& day, int num) : weekday(day), lesson_num(num) {}
 
 std::string DateTime::toString() const {
@@ -33,31 +33,27 @@ bool DateTime::operator<(const DateTime& other) const {
     auto it2 = std::find(dayOrder.begin(), dayOrder.end(), other.weekday);
     int idx1 = static_cast<int>(std::distance(dayOrder.begin(), it1));
     int idx2 = static_cast<int>(std::distance(dayOrder.begin(), it2));
-    
     if (idx1 != idx2) return idx1 < idx2;
     return lesson_num < other.lesson_num;
 }
 
-// ============ Schedule_unit ============
+/* ======================== Schedule_unit ======================== */
 Schedule_unit::Schedule_unit() : subject(""), teacher(""), group(0), timeIndex(-1), auditoryIndex(-1) {}
-
 Schedule_unit::Schedule_unit(const std::string& subj, const std::string& teach, 
                               int gr, int tIdx, int aIdx)
     : subject(subj), teacher(teach), group(gr), timeIndex(tIdx), auditoryIndex(aIdx) {}
 
-// ============ Indexes ============
+/* ======================== Indexes ======================== */
 Indexes::Indexes(int t, int a) : timeIndex(t), auditoryIndex(a) {}
-
 bool Indexes::operator==(const Indexes& other) const {
     return timeIndex == other.timeIndex && auditoryIndex == other.auditoryIndex;
 }
-
 bool Indexes::operator<(const Indexes& other) const {
     if (timeIndex != other.timeIndex) return timeIndex < other.timeIndex;
     return auditoryIndex < other.auditoryIndex;
 }
 
-// ============ TeacherSchedule / SubjectSchedule / GroupSchedule ============
+/* ======================== TeacherSchedule / SubjectSchedule / GroupSchedule ======================== */
 void TeacherSchedule::addPosition(const Indexes& position) { positions.push_back(position); }
 void TeacherSchedule::clear() { positions.clear(); }
 bool TeacherSchedule::isEmpty() const { return positions.empty(); }
@@ -73,68 +69,55 @@ void GroupSchedule::clear() { positions.clear(); }
 bool GroupSchedule::isEmpty() const { return positions.empty(); }
 size_t GroupSchedule::size() const { return positions.size(); }
 
-// ============ SelectedItems ============
+/* ======================== SelectedItems ======================== */
 void SelectedItems::clear() { selected_positions.clear(); }
 bool SelectedItems::isEmpty() const { return selected_positions.empty(); }
 size_t SelectedItems::size() const { return selected_positions.size(); }
 
-// ============ Session ============
+/* ======================== Session ======================== */
 void Session::clear() { selectedItems.clear(); }
 
-// ============ SessionManager ============
-Session& SessionManager::getSession(UserID id) {
-    return userSessions[id];
-}
-
+/* ======================== SessionManager ======================== */
+Session& SessionManager::getSession(UserID id) { return userSessions[id]; }
 void SessionManager::clearSelection(UserID id) {
     auto it = userSessions.find(id);
-    if (it != userSessions.end()) {
-        it->second.clear();
-    }
+    if (it != userSessions.end()) it->second.clear();
 }
-
 void SessionManager::addToSelection(UserID id, const Indexes& idx) {
     userSessions[id].selectedItems.selected_positions.push_back(idx);
 }
-
 void SessionManager::setSelection(UserID id, const std::vector<Indexes>& positions) {
     userSessions[id].selectedItems.selected_positions = positions;
 }
-
 const SelectedItems& SessionManager::getSelection(UserID id) const {
     static const SelectedItems empty;
     auto it = userSessions.find(id);
     return (it != userSessions.end()) ? it->second.selectedItems : empty;
 }
 
-// ============ Command ============
-Command::Command() : cmd(ADD), hasSortField(false), sortFieldVal(Cond::GROUP), sortOrder("asc") {}
+/* ======================== Command ======================== */
+Command::Command() : cmd(ADD), hasSortField(false), sortFieldVal(Cond::GROUP),
+                     sortOrder("asc"), valid(true), fullOutput(false) {}
 
-// ============ Database: private methods ============
+/* ======================== Database: private methods ======================== */
 int Database::findTimeIndex(const DateTime& dt) const {
-    for (size_t i = 0; i < times.size(); ++i) {
+    for (size_t i = 0; i < times.size(); ++i)
         if (times[i] == dt) return static_cast<int>(i);
-    }
     return -1;
 }
-
 int Database::findAuditoryIndex(const Auditory& aud) const {
-    for (size_t i = 0; i < auditories.size(); ++i) {
+    for (size_t i = 0; i < auditories.size(); ++i)
         if (auditories[i] == aud) return static_cast<int>(i);
-    }
     return -1;
 }
-
 bool Database::hasCollision(int timeIndex, int auditoryIndex) const {
     if (timeIndex < 0 || timeIndex >= static_cast<int>(data.size())) return false;
     if (auditoryIndex < 0 || auditoryIndex >= static_cast<int>(data[timeIndex].size())) return false;
     return data[timeIndex][auditoryIndex] != nullptr;
 }
 
-// ============ Database: public methods ============
-Database::Database() {
-    // Vectors initialized empty; can be populated via loadFromFile or manually
-}
+/* ======================== Database: public methods ======================== */
+Database::Database() {}
 
 bool Database::loadFromFile(const std::string& filename) {
     std::ifstream file(filename);
@@ -150,11 +133,7 @@ bool Database::loadFromFile(const std::string& filename) {
         std::istringstream iss(line);
         std::string day, auditory, subject, teacher;
         int lessonNum, group;
-        
-        // Порядок полей: день, номер пары, аудитория, предмет, преподаватель, группа
-        if (!(iss >> day >> lessonNum >> auditory >> subject >> teacher >> group)) {
-            continue;
-        }
+        if (!(iss >> day >> lessonNum >> auditory >> subject >> teacher >> group)) continue;
         
         DateTime dt(day, lessonNum);
         timeSet.insert(dt);
@@ -163,17 +142,12 @@ bool Database::loadFromFile(const std::string& filename) {
     }
     file.close();
     
-    // Build vectors from sets (sorted order)
     times.assign(timeSet.begin(), timeSet.end());
     auditories.assign(audSet.begin(), audSet.end());
     
-    // Initialize sparse matrix
     data.resize(times.size());
-    for (auto& row : data) {
-        row.resize(auditories.size());
-    }
+    for (auto& row : data) row.resize(auditories.size());
     
-    // Insert records
     for (const auto& rec : records) {
         std::string day, auditory, subject, teacher;
         int lessonNum, group;
@@ -182,24 +156,20 @@ bool Database::loadFromFile(const std::string& filename) {
         DateTime dt(day, lessonNum);
         int tIdx = findTimeIndex(dt);
         int aIdx = findAuditoryIndex(auditory);
-        
         if (tIdx >= 0 && aIdx >= 0) {
             auto unit = std::make_unique<Schedule_unit>(subject, teacher, group, tIdx, aIdx);
             data[tIdx][aIdx] = std::move(unit);
-            
             teacherIndex[teacher].addPosition(Indexes(tIdx, aIdx));
             subjectIndex[subject].addPosition(Indexes(tIdx, aIdx));
             groupIndex[group].addPosition(Indexes(tIdx, aIdx));
         }
     }
-    
     return true;
 }
 
 bool Database::saveToFile(const std::string& filename) const {
     std::ofstream file(filename);
     if (!file.is_open()) return false;
-    
     for (size_t t = 0; t < data.size(); ++t) {
         for (size_t a = 0; a < data[t].size(); ++a) {
             if (data[t][a] != nullptr) {
@@ -218,11 +188,15 @@ bool Database::saveToFile(const std::string& filename) const {
 }
 
 bool Database::execute(UserID userId, const Command& cmd) {
+    if (!cmd.valid) {
+        std::cout << "Ошибка: " << cmd.errorMsg << "\n";
+        return false;
+    }
+
     switch (cmd.cmd) {
         case ADD:
             return insertRecord(cmd.newRecord);
             
-        case DELETE:
         case REMOVE:
             removeRecords(cmd.removeConditions);
             return true;
@@ -230,9 +204,8 @@ bool Database::execute(UserID userId, const Command& cmd) {
         case SELECT: {
             auto results = select(cmd.conditions);
             std::vector<Indexes> positions;
-            for (const auto& unit : results) {
+            for (const auto& unit : results)
                 positions.emplace_back(unit.timeIndex, unit.auditoryIndex);
-            }
             sessionManager.setSelection(userId, positions);
             return true;
         }
@@ -240,15 +213,12 @@ bool Database::execute(UserID userId, const Command& cmd) {
         case RESELECT: {
             const auto& current = sessionManager.getSelection(userId);
             std::vector<Indexes> filtered;
-            
             for (const auto& idx : current.selected_positions) {
                 if (idx.timeIndex >= 0 && idx.timeIndex < static_cast<int>(data.size()) &&
                     idx.auditoryIndex >= 0 && idx.auditoryIndex < static_cast<int>(data[idx.timeIndex].size()) &&
                     data[idx.timeIndex][idx.auditoryIndex] != nullptr) {
-                    
-                    if (match(*data[idx.timeIndex][idx.auditoryIndex], *this, cmd.conditions)) {
+                    if (match(*data[idx.timeIndex][idx.auditoryIndex], *this, cmd.conditions))
                         filtered.push_back(idx);
-                    }
                 }
             }
             sessionManager.setSelection(userId, filtered);
@@ -256,27 +226,39 @@ bool Database::execute(UserID userId, const Command& cmd) {
         }
             
         case PRINT: {
-            const auto& selection = sessionManager.getSelection(userId);
-            std::vector<Schedule_unit> toPrint;
-            
-            for (const auto& idx : selection.selected_positions) {
-                if (idx.timeIndex >= 0 && idx.timeIndex < static_cast<int>(data.size()) &&
-                    idx.auditoryIndex >= 0 && idx.auditoryIndex < static_cast<int>(data[idx.timeIndex].size()) &&
-                    data[idx.timeIndex][idx.auditoryIndex] != nullptr) {
-                    toPrint.push_back(*data[idx.timeIndex][idx.auditoryIndex]);
+            std::vector<Indexes> positions;
+            if (cmd.fullOutput) {
+                // PRINT без аргументов — вся матрица
+                for (size_t t = 0; t < data.size(); ++t)
+                    for (size_t a = 0; a < data[t].size(); ++a)
+                        if (data[t][a] != nullptr)
+                            positions.emplace_back(static_cast<int>(t), static_cast<int>(a));
+            }
+            else if (cmd.conditions.empty()) {
+                // PRINT SELECT — текущая выборка
+                const auto& selection = sessionManager.getSelection(userId);
+                if (selection.isEmpty()) {
+                    std::cout << "Выборка пуста. Сначала выполните SELECT.\n";
+                    return true;
                 }
+                positions = selection.selected_positions;
             }
-            
-            if (cmd.hasSortField) {
-                sortSchedule(toPrint, cmd.sortFieldVal, cmd.sortOrder == "asc");
+            else {
+                // Быстрый поиск по условию
+                auto results = select(cmd.conditions);
+                if (results.empty()) {
+                    std::cout << "Ничего не найдено.\n";
+                    return true;
+                }
+                for (const auto& unit : results)
+                    positions.emplace_back(unit.timeIndex, unit.auditoryIndex);
             }
-            printSchedule(toPrint, *this, cmd.printFields);
+            printMatrix(positions, *this);
             return true;
         }
             
         case SAVE:
         case LOAD:
-            // Filename handling would require additional Command field; placeholder
             return false;
             
         default:
@@ -285,72 +267,50 @@ bool Database::execute(UserID userId, const Command& cmd) {
 }
 
 bool Database::insertRecord(const Schedule_unit& record) {
-    // Check auditory collision
-    if (hasCollision(record.timeIndex, record.auditoryIndex)) {
-        return false;
-    }
+    if (hasCollision(record.timeIndex, record.auditoryIndex)) return false;
     
-    // Check teacher collision at same time
     auto tIt = teacherIndex.find(record.teacher);
     if (tIt != teacherIndex.end()) {
-        for (const auto& pos : tIt->second.positions) {
-            if (pos.timeIndex == record.timeIndex) {
-                return false;
-            }
-        }
+        for (const auto& pos : tIt->second.positions)
+            if (pos.timeIndex == record.timeIndex) return false;
     }
-    
-    // Check group collision at same time
     auto gIt = groupIndex.find(record.group);
     if (gIt != groupIndex.end()) {
-        for (const auto& pos : gIt->second.positions) {
-            if (pos.timeIndex == record.timeIndex) {
-                return false;
-            }
-        }
+        for (const auto& pos : gIt->second.positions)
+            if (pos.timeIndex == record.timeIndex) return false;
     }
     
-    // Insert record
     auto unit = std::make_unique<Schedule_unit>(record);
     data[record.timeIndex][record.auditoryIndex] = std::move(unit);
     
-    // Update indices
     teacherIndex[record.teacher].addPosition(Indexes(record.timeIndex, record.auditoryIndex));
     subjectIndex[record.subject].addPosition(Indexes(record.timeIndex, record.auditoryIndex));
     groupIndex[record.group].addPosition(Indexes(record.timeIndex, record.auditoryIndex));
-    
     return true;
 }
 
 size_t Database::removeRecords(const SearchConditions& conditions) {
     size_t removed = 0;
-    
     for (size_t t = 0; t < data.size(); ++t) {
         for (size_t a = 0; a < data[t].size(); ++a) {
             if (data[t][a] != nullptr && match(*data[t][a], *this, conditions)) {
                 const auto& unit = *data[t][a];
                 
-                // Remove from teacher index
                 auto tIt = teacherIndex.find(unit.teacher);
                 if (tIt != teacherIndex.end()) {
                     auto& pos = tIt->second.positions;
                     pos.erase(std::remove(pos.begin(), pos.end(), Indexes(static_cast<int>(t), static_cast<int>(a))), pos.end());
                 }
-                
-                // Remove from subject index
                 auto sIt = subjectIndex.find(unit.subject);
                 if (sIt != subjectIndex.end()) {
                     auto& pos = sIt->second.positions;
                     pos.erase(std::remove(pos.begin(), pos.end(), Indexes(static_cast<int>(t), static_cast<int>(a))), pos.end());
                 }
-                
-                // Remove from group index
                 auto gIt = groupIndex.find(unit.group);
                 if (gIt != groupIndex.end()) {
                     auto& pos = gIt->second.positions;
                     pos.erase(std::remove(pos.begin(), pos.end(), Indexes(static_cast<int>(t), static_cast<int>(a))), pos.end());
                 }
-                
                 data[t][a].reset();
                 ++removed;
             }
@@ -361,12 +321,10 @@ size_t Database::removeRecords(const SearchConditions& conditions) {
 
 std::vector<Schedule_unit> Database::select(const SearchConditions& conditions) const {
     std::vector<Schedule_unit> results;
-    
     for (size_t t = 0; t < data.size(); ++t) {
         for (size_t a = 0; a < data[t].size(); ++a) {
-            if (data[t][a] != nullptr && match(*data[t][a], *this, conditions)) {
+            if (data[t][a] != nullptr && match(*data[t][a], *this, conditions))
                 results.push_back(*data[t][a]);
-            }
         }
     }
     return results;
@@ -379,9 +337,8 @@ std::vector<Schedule_unit> Database::getTeacherSchedule(const std::string& teach
         for (const auto& idx : it->second.positions) {
             if (idx.timeIndex >= 0 && idx.timeIndex < static_cast<int>(data.size()) &&
                 idx.auditoryIndex >= 0 && idx.auditoryIndex < static_cast<int>(data[idx.timeIndex].size()) &&
-                data[idx.timeIndex][idx.auditoryIndex] != nullptr) {
+                data[idx.timeIndex][idx.auditoryIndex] != nullptr)
                 result.push_back(*data[idx.timeIndex][idx.auditoryIndex]);
-            }
         }
     }
     return result;
@@ -394,9 +351,8 @@ std::vector<Schedule_unit> Database::getGroupSchedule(int group) const {
         for (const auto& idx : it->second.positions) {
             if (idx.timeIndex >= 0 && idx.timeIndex < static_cast<int>(data.size()) &&
                 idx.auditoryIndex >= 0 && idx.auditoryIndex < static_cast<int>(data[idx.timeIndex].size()) &&
-                data[idx.timeIndex][idx.auditoryIndex] != nullptr) {
+                data[idx.timeIndex][idx.auditoryIndex] != nullptr)
                 result.push_back(*data[idx.timeIndex][idx.auditoryIndex]);
-            }
         }
     }
     return result;
@@ -409,9 +365,8 @@ std::vector<Schedule_unit> Database::getSubjectSchedule(const std::string& subje
         for (const auto& idx : it->second.positions) {
             if (idx.timeIndex >= 0 && idx.timeIndex < static_cast<int>(data.size()) &&
                 idx.auditoryIndex >= 0 && idx.auditoryIndex < static_cast<int>(data[idx.timeIndex].size()) &&
-                data[idx.timeIndex][idx.auditoryIndex] != nullptr) {
+                data[idx.timeIndex][idx.auditoryIndex] != nullptr)
                 result.push_back(*data[idx.timeIndex][idx.auditoryIndex]);
-            }
         }
     }
     return result;
@@ -421,13 +376,17 @@ std::vector<Auditory> Database::getFreeAuditories(const DateTime& dt) const {
     std::vector<Auditory> free;
     int tIdx = findTimeIndex(dt);
     if (tIdx < 0) return auditories;
-    
-    for (size_t a = 0; a < auditories.size(); ++a) {
-        if (tIdx < static_cast<int>(data.size()) && a < data[tIdx].size() && data[tIdx][a] == nullptr) {
+    for (size_t a = 0; a < auditories.size(); ++a)
+        if (tIdx < static_cast<int>(data.size()) && a < data[tIdx].size() && data[tIdx][a] == nullptr)
             free.push_back(auditories[a]);
-        }
-    }
     return free;
+}
+
+const Schedule_unit* Database::getUnit(int t, int a) const {
+    if (t < 0 || t >= static_cast<int>(data.size()) ||
+        a < 0 || a >= static_cast<int>(data[t].size()))
+        return nullptr;
+    return data[t][a].get();
 }
 
 const std::vector<DateTime>& Database::getTimes() const { return times; }
@@ -435,7 +394,7 @@ const std::vector<Auditory>& Database::getAuditories() const { return auditories
 SessionManager& Database::getSessionManager() { return sessionManager; }
 const SessionManager& Database::getSessionManager() const { return sessionManager; }
 
-// ============ match function ============
+/* ======================== match ======================== */
 bool match(const Schedule_unit& unit, const Database& db, const SearchConditions& conditions) {
     for (const auto& cond : conditions) {
         std::string strVal;
@@ -443,29 +402,18 @@ bool match(const Schedule_unit& unit, const Database& db, const SearchConditions
         bool isStringField = true;
         
         switch (cond.field) {
-            case Cond::GROUP:
-                intVal = unit.group;
-                isStringField = false;
-                break;
-            case Cond::TEACHER:
-                strVal = unit.teacher;
-                break;
-            case Cond::SUBJECT:
-                strVal = unit.subject;
-                break;
+            case Cond::GROUP: intVal = unit.group; isStringField = false; break;
+            case Cond::TEACHER: strVal = unit.teacher; break;
+            case Cond::SUBJECT: strVal = unit.subject; break;
             case Cond::AUDITORY:
-                if (unit.auditoryIndex >= 0 && unit.auditoryIndex < static_cast<int>(db.getAuditories().size())) {
+                if (unit.auditoryIndex >= 0 && unit.auditoryIndex < static_cast<int>(db.getAuditories().size()))
                     strVal = db.getAuditories()[unit.auditoryIndex];
-                }
                 break;
-            case Cond::DATE:
-            case Cond::DAY:
-                if (unit.timeIndex >= 0 && unit.timeIndex < static_cast<int>(db.getTimes().size())) {
+            case Cond::DATE: case Cond::DAY:
+                if (unit.timeIndex >= 0 && unit.timeIndex < static_cast<int>(db.getTimes().size()))
                     strVal = db.getTimes()[unit.timeIndex].weekday;
-                }
                 break;
-            case Cond::TIME:
-            case Cond::LESSON_NUM:
+            case Cond::TIME: case Cond::LESSON_NUM:
                 if (unit.timeIndex >= 0 && unit.timeIndex < static_cast<int>(db.getTimes().size())) {
                     intVal = db.getTimes()[unit.timeIndex].lesson_num;
                     isStringField = false;
@@ -474,7 +422,6 @@ bool match(const Schedule_unit& unit, const Database& db, const SearchConditions
         }
         
         bool condResult = false;
-        
         if (isStringField) {
             switch (cond.relation) {
                 case Cond::EQ: condResult = (strVal == cond.strValue); break;
@@ -493,19 +440,24 @@ bool match(const Schedule_unit& unit, const Database& db, const SearchConditions
                 case Cond::GT: condResult = (intVal > cond.intValue); break;
                 case Cond::LE: condResult = (intVal <= cond.intValue); break;
                 case Cond::GE: condResult = (intVal >= cond.intValue); break;
-                case Cond::CONTAINS: condResult = false; break; // N/A for numeric
+                case Cond::CONTAINS: condResult = false; break;
             }
         }
-        
         if (!condResult) return false;
     }
     return true;
 }
 
-// ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ПАРСЕРА ============
+/* ======================== Вспомогательные функции парсера ======================== */
 namespace {
+    std::string toUpper(const std::string& s) {
+        std::string res = s;
+        for (auto& c : res)
+            c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        return res;
+    }
 
-    Cond::Field parseField(const std::string& token) {
+    bool parseField(const std::string& token, Cond::Field& out) {
         static const std::map<std::string, Cond::Field> fieldMap = {
             {"GROUP", Cond::GROUP},
             {"TEACHER", Cond::TEACHER},
@@ -516,9 +468,12 @@ namespace {
             {"TIME", Cond::TIME},
             {"LESSON_NUM", Cond::LESSON_NUM}
         };
-        auto it = fieldMap.find(token);
-        if (it != fieldMap.end()) return it->second;
-        return Cond::GROUP;   // поле по умолчанию при ошибке
+        auto it = fieldMap.find(toUpper(token));
+        if (it != fieldMap.end()) {
+            out = it->second;
+            return true;
+        }
+        return false;
     }
 
     Cond::Relation parseRelation(const std::string& token) {
@@ -528,32 +483,24 @@ namespace {
         if (token == ">")  return Cond::GT;
         if (token == "<=") return Cond::LE;
         if (token == ">=") return Cond::GE;
-        if (token == "CONTAINS") return Cond::CONTAINS;
-        return Cond::EQ;   // по умолчанию
+        if (toUpper(token) == "CONTAINS") return Cond::CONTAINS;
+        return Cond::EQ;
     }
 
     bool isNumericField(Cond::Field field) {
         return field == Cond::GROUP || field == Cond::TIME || field == Cond::LESSON_NUM;
     }
+}
 
-    std::string toUpper(const std::string& s) {
-        std::string res = s;
-        for (auto& c : res)
-            c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-        return res;
-    }
-} // namespace
-
-// ============ parse function ============
+/* ======================== parse ======================== */
 Command parse(const std::string& query) {
     Command cmd;
     std::istringstream iss(query);
     std::string token;
 
-    if (!(iss >> token)) return cmd;                   // пустая строка
+    if (!(iss >> token)) { cmd.valid = false; cmd.errorMsg = "Пустая команда"; return cmd; }
     std::string command = toUpper(token);
 
-    // Определяем тип команды
     if (command == "ADD")           cmd.cmd = ADD;
     else if (command == "DELETE" || command == "REMOVE") cmd.cmd = REMOVE;
     else if (command == "SELECT")   cmd.cmd = SELECT;
@@ -561,28 +508,36 @@ Command parse(const std::string& query) {
     else if (command == "SAVE")     cmd.cmd = SAVE;
     else if (command == "LOAD")     cmd.cmd = LOAD;
     else if (command == "PRINT")    cmd.cmd = PRINT;
+    else { cmd.valid = false; cmd.errorMsg = "Неизвестная команда: " + command; return cmd; }
 
-    // Парсим условия для SELECT / RESELECT / REMOVE
+    // SELECT / RESELECT / REMOVE
     if (cmd.cmd == SELECT || cmd.cmd == RESELECT || cmd.cmd == REMOVE) {
         while (iss >> token) {
             std::string upperToken = toUpper(token);
-            if (upperToken == "AND") continue;   // пропускаем связку AND
+            if (upperToken == "AND") continue;
+
+            Cond::Field field;
+            if (!parseField(upperToken, field)) {
+                cmd.valid = false; cmd.errorMsg = "Неизвестное поле: " + token; return cmd;
+            }
+            std::string relToken;
+            if (!(iss >> relToken)) {
+                cmd.valid = false; cmd.errorMsg = "Ожидается оператор после поля"; return cmd;
+            }
+            Cond::Relation rel = parseRelation(relToken);
+            std::string value;
+            if (!(iss >> value)) {
+                cmd.valid = false; cmd.errorMsg = "Ожидается значение после оператора"; return cmd;
+            }
 
             Cond cond;
-            cond.field = parseField(upperToken);
-
-            std::string relToken;
-            if (!(iss >> relToken)) break;
-            cond.relation = parseRelation(relToken);
-
-            std::string value;
-            if (!(iss >> value)) break;
-
-            if (isNumericField(cond.field)) {
+            cond.field = field;
+            cond.relation = rel;
+            if (isNumericField(field)) {
                 try {
                     cond.intValue = std::stoi(value);
                 } catch (...) {
-                    cond.intValue = 0;            // при ошибке оставляем 0
+                    cmd.valid = false; cmd.errorMsg = "Некорректное число: " + value; return cmd;
                 }
                 cond.strValue = value;
             } else {
@@ -596,50 +551,107 @@ Command parse(const std::string& query) {
                 cmd.conditions.push_back(cond);
         }
     }
-    // Парсим PRINT [SORT BY field ASC/DESC] [field1 field2 ...]
+    // PRINT
     else if (cmd.cmd == PRINT) {
-        while (iss >> token) {
-            std::string upperToken = toUpper(token);
-            if (upperToken == "SORT") {
-                std::string by;
-                if (!(iss >> by) || toUpper(by) != "BY") break;
-                std::string fieldName;
-                if (!(iss >> fieldName)) break;
-                cmd.sortFieldVal = parseField(toUpper(fieldName));
-                cmd.hasSortField = true;
-
-                std::string order;
-                if (iss >> order) {
-                    std::string upperOrder = toUpper(order);
-                    if (upperOrder == "ASC" || upperOrder == "DESC") {
-                        cmd.sortOrder = (upperOrder == "DESC" ? "desc" : "asc");
-                    } else {
-                        // не ASC/DESC – оставляем asc по умолчанию,
-                        // но токен уже считан, его «вернуть» сложно, поэтому просто игнорируем
-                        cmd.sortOrder = "asc";
-                    }
-                }
-            } else {
-                // произвольное поле для вывода
-                cmd.printFields.push_back(parseField(upperToken));
-            }
+        if (!(iss >> token)) {
+            cmd.fullOutput = true;
+            return cmd;
         }
+        std::string upperToken = toUpper(token);
+        if (upperToken == "SELECT") {
+            return cmd;
+        }
+        Cond::Field field;
+        if (!parseField(upperToken, field)) {
+            cmd.valid = false;
+            cmd.errorMsg = "Неизвестное поле: " + token + ". Допустимо: PRINT, PRINT SELECT, PRINT ПОЛЕ ЗНАЧЕНИЕ";
+            return cmd;
+        }
+        std::string value;
+        if (!(iss >> value)) {
+            cmd.valid = false; cmd.errorMsg = "Ожидается значение после поля"; return cmd;
+        }
+
+        Cond cond;
+        cond.field = field;
+        cond.relation = Cond::EQ;
+        if (isNumericField(field)) {
+            try {
+                cond.intValue = std::stoi(value);
+            } catch (...) {
+                cmd.valid = false; cmd.errorMsg = "Некорректное числовое значение: " + value;
+                return cmd;
+            }
+            cond.strValue = value;
+        } else {
+            cond.strValue = value;
+            cond.intValue = 0;
+        }
+        cmd.conditions.push_back(cond);
     }
 
     return cmd;
 }
 
-// ============ printSchedule function ============
+/* ======================== printMatrix ======================== */
+void printMatrix(const std::vector<Indexes>& selection, const Database& db) {
+    const auto& times = db.getTimes();
+    const auto& auditories = db.getAuditories();
+    if (times.empty() || auditories.empty()) {
+        std::cout << "Расписание пусто.\n";
+        return;
+    }
+
+    const int timeWidth = 12;
+    const int cellWidth = 22;
+
+    std::cout << std::setw(timeWidth) << " ";
+    for (const auto& aud : auditories) {
+        std::string shortAud = aud;
+        if (shortAud.size() > static_cast<size_t>(cellWidth - 2))
+            shortAud = shortAud.substr(0, cellWidth - 2);
+        std::cout << " " << std::setw(cellWidth) << shortAud;
+    }
+    std::cout << "\n";
+
+    std::set<Indexes> selectedSet(selection.begin(), selection.end());
+
+    for (size_t t = 0; t < times.size(); ++t) {
+        std::string dayShort = times[t].weekday.substr(0, 3);
+        std::string timeLabel = dayShort + " " + std::to_string(times[t].lesson_num);
+        std::cout << std::setw(timeWidth) << timeLabel;
+
+        for (size_t a = 0; a < auditories.size(); ++a) {
+            bool isSelected = selectedSet.count(Indexes(static_cast<int>(t), static_cast<int>(a))) > 0;
+            if (isSelected) {
+                const Schedule_unit* unit = db.getUnit(static_cast<int>(t), static_cast<int>(a));
+                if (unit) {
+                    std::stringstream ss;
+                    ss << unit->subject << " " << unit->teacher << "(" << unit->group << ")";
+                    std::string info = ss.str();
+                    if (info.size() > static_cast<size_t>(cellWidth - 2))
+                        info = info.substr(0, cellWidth - 2);
+                    std::cout << " " << std::setw(cellWidth) << info;
+                } else {
+                    std::cout << " " << std::setw(cellWidth) << "---";
+                }
+            } else {
+                std::cout << " " << std::setw(cellWidth) << "---";
+            }
+        }
+        std::cout << "\n";
+    }
+}
+
+/* ======================== printSchedule (запасная) ======================== */
 void printSchedule(const std::vector<Schedule_unit>& schedule, 
                    const Database& db,
                    const std::vector<Cond::Field>& fields) {
     for (const auto& unit : schedule) {
         bool first = true;
-        
-        auto printField = [&](Cond::Field f) {
+        for (auto f : fields) {
             if (!first) std::cout << " ";
             first = false;
-            
             switch (f) {
                 case Cond::GROUP: std::cout << unit.group; break;
                 case Cond::TEACHER: std::cout << unit.teacher; break;
@@ -648,65 +660,38 @@ void printSchedule(const std::vector<Schedule_unit>& schedule,
                     if (unit.auditoryIndex >= 0 && unit.auditoryIndex < static_cast<int>(db.getAuditories().size()))
                         std::cout << db.getAuditories()[unit.auditoryIndex];
                     break;
-                case Cond::DATE:
-                case Cond::DAY:
+                case Cond::DATE: case Cond::DAY:
                     if (unit.timeIndex >= 0 && unit.timeIndex < static_cast<int>(db.getTimes().size()))
                         std::cout << db.getTimes()[unit.timeIndex].weekday;
                     break;
-                case Cond::TIME:
-                case Cond::LESSON_NUM:
+                case Cond::TIME: case Cond::LESSON_NUM:
                     if (unit.timeIndex >= 0 && unit.timeIndex < static_cast<int>(db.getTimes().size()))
                         std::cout << db.getTimes()[unit.timeIndex].lesson_num;
                     break;
             }
-        };
-        
-        if (fields.empty()) {
-            // Print all default fields
-            if (unit.timeIndex >= 0 && unit.timeIndex < static_cast<int>(db.getTimes().size())) {
-                std::cout << db.getTimes()[unit.timeIndex].weekday << " "
-                          << db.getTimes()[unit.timeIndex].lesson_num << " ";
-            }
-            if (unit.auditoryIndex >= 0 && unit.auditoryIndex < static_cast<int>(db.getAuditories().size())) {
-                std::cout << db.getAuditories()[unit.auditoryIndex] << " ";
-            }
-            std::cout << unit.subject << " " << unit.teacher << " " << unit.group;
-        } else {
-            for (auto f : fields) printField(f);
         }
         std::cout << "\n";
     }
 }
 
-// ============ sortSchedule function ============
+/* ======================== sortSchedule ======================== */
 void sortSchedule(std::vector<Schedule_unit>& schedule, 
                   Cond::Field field, 
                   bool ascending) {
     std::sort(schedule.begin(), schedule.end(), [field, ascending](const Schedule_unit& a, const Schedule_unit& b) {
         int cmp = 0;
-        
         switch (field) {
             case Cond::GROUP:
-                cmp = (a.group < b.group) ? -1 : (a.group > b.group) ? 1 : 0;
-                break;
+                cmp = (a.group < b.group) ? -1 : (a.group > b.group) ? 1 : 0; break;
             case Cond::TEACHER:
-                cmp = (a.teacher < b.teacher) ? -1 : (a.teacher > b.teacher) ? 1 : 0;
-                break;
+                cmp = (a.teacher < b.teacher) ? -1 : (a.teacher > b.teacher) ? 1 : 0; break;
             case Cond::SUBJECT:
-                cmp = (a.subject < b.subject) ? -1 : (a.subject > b.subject) ? 1 : 0;
-                break;
+                cmp = (a.subject < b.subject) ? -1 : (a.subject > b.subject) ? 1 : 0; break;
             case Cond::AUDITORY:
-                cmp = (a.auditoryIndex < b.auditoryIndex) ? -1 : (a.auditoryIndex > b.auditoryIndex) ? 1 : 0;
-                break;
-            case Cond::DATE:
-            case Cond::DAY:
-            case Cond::TIME:
-            case Cond::LESSON_NUM:
-                cmp = (a.timeIndex < b.timeIndex) ? -1 : (a.timeIndex > b.timeIndex) ? 1 : 0;
-                break;
-            default:
-                cmp = 0;
-                break;
+                cmp = (a.auditoryIndex < b.auditoryIndex) ? -1 : (a.auditoryIndex > b.auditoryIndex) ? 1 : 0; break;
+            case Cond::DATE: case Cond::DAY: case Cond::TIME: case Cond::LESSON_NUM:
+                cmp = (a.timeIndex < b.timeIndex) ? -1 : (a.timeIndex > b.timeIndex) ? 1 : 0; break;
+            default: cmp = 0;
         }
         return ascending ? (cmp < 0) : (cmp > 0);
     });

@@ -60,7 +60,6 @@ void generateTestData(int numLessonsPerDay,
             std::string auditory = auditories[auditoryDist(gen)];
             int group = groups[groupDist(gen)];
             
-            // ВАЖНО: порядок полей соответствует loadFromFile
             outFile << weekday << " "
                     << lesson << " "
                     << auditory << " "
