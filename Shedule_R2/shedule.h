@@ -11,13 +11,13 @@
 #include <cctype>
 #include <iostream>
 
-// ============ TYPEDEFS ============
+
 typedef int UserID;
 typedef std::string Teacher_name;
 typedef std::string Subject_name;
 typedef std::string Auditory;
 
-// ============ STRUCTS & ENUMS ============
+
 struct Cond { 
     enum Field { 
         GROUP, TEACHER, SUBJECT, AUDITORY, DATE, TIME, DAY, LESSON_NUM
@@ -112,7 +112,7 @@ public:
 struct Command {
     CommandType cmd;
     SearchConditions conditions;
-    std::vector<Cond::Field> printFields;   // больше не используется, оставлен для совместимости
+    std::vector<Cond::Field> printFields;   
     bool hasSortField;
     Cond::Field sortFieldVal;
     std::string sortOrder;
@@ -120,7 +120,7 @@ struct Command {
     SearchConditions removeConditions;
     bool valid;
     std::string errorMsg;
-    bool fullOutput;   // true, если PRINT вызван без аргументов (показать всё расписание)
+    bool fullOutput;   
     Command();
 };
 
