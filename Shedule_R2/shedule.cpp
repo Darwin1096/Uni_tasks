@@ -123,6 +123,13 @@ bool Database::loadFromFile(const std::string& filename) {
     std::ifstream file(filename);
     if (!file.is_open()) return false;
     
+    times.clear();
+    auditories.clear();
+    data.clear();
+    teacherIndex.clear();
+    subjectIndex.clear();
+    groupIndex.clear();
+    
     std::string line;
     std::set<Auditory> audSet;
     std::set<DateTime> timeSet;

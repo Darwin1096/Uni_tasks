@@ -25,11 +25,11 @@ void generateTestData(int numLessonsPerDay,
     // Списки преподавателей, предметов, аудиторий, групп
     std::vector<std::string> teachers;
     for (int i = 1; i <= numTeachers; ++i)
-        teachers.push_back("Teacher_" + std::to_string(i));
+        teachers.push_back("Teach_" + std::to_string(i));
     
     std::vector<std::string> subjects;
     for (int i = 1; i <= numSubjects; ++i)
-        subjects.push_back("Subject_" + std::to_string(i));
+        subjects.push_back("Subj_" + std::to_string(i));
     
     std::vector<std::string> auditories;
     for (int i = 1; i <= numAuditories; ++i)
