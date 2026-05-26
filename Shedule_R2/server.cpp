@@ -93,7 +93,8 @@ static Result handleAdd(Database& db, const std::string& args) {
         return Result(false, "Формат: ADD день урок аудитория предмет преподаватель группа");
     }
 
-    DateTime dt(day, lesson);
+    DateTime dt(day, lesson);   // используется ровно то, что ввёл пользователь
+
     const auto& times = db.getTimes();
     const auto& auds  = db.getAuditories();
     int ti = -1, ai = -1;
@@ -108,9 +109,7 @@ static Result handleAdd(Database& db, const std::string& args) {
 
     Schedule_unit rec(subj, teach, grp, ti, ai);
     if (db.insertRecord(rec)) {
-        Result res(true, "Добавлено");
-        fillTimeAndAudInfo(res, db);
-        return res;
+        return Result(true, "Добавлено");
     } else {
         return Result(false, "Ошибка (коллизия)");
     }
@@ -122,13 +121,11 @@ static Result handleGenerate(Database& db, const std::string& args) {
     double f = 0.6;
     std::istringstream iss(args);
     if (!(iss >> a >> b >> c >> d >> e >> f)) {
-        // если параметров нет, используем значения по умолчанию
+        // Если параметров нет, используются значения по умолчанию
     }
     generateTestData(a, b, c, d, e, f);
     if (db.loadFromFile("Data.txt")) {
-        Result res(true, "Сгенерировано в Data.txt и загружено");
-        fillTimeAndAudInfo(res, db);
-        return res;
+        return Result(true, "Сгенерировано и загружено");
     } else {
         return Result(false, "Ошибка загрузки Data.txt после генерации");
     }
@@ -144,13 +141,13 @@ static Result processCommand(Database& db, UserID uid, const std::string& comman
     iss >> cmdToken;
     std::string cmd = toUpper(cmdToken);
 
-    // EXIT обрабатывается на уровне сервера, сюда не попадает
     if (cmd == "HELP") {
-        return Result(true, 
+        return Result(true,
             "КОМАНДЫ:\n"
             "  PRINT                  - полное расписание\n"
             "  PRINT SELECT           - текущая выборка\n"
-            "  PRINT <поле> <знач>    - быстрый поиск\n"
+            "  PRINT TEACHER == имя   - поиск по преподавателю\n"
+            "  PRINT SUBJECT == назв  - поиск по предмету\n"
             "  SELECT <условия>       - поиск в выборку\n"
             "  RESELECT <условия>     - уточнить выборку\n"
             "  ADD <день> <пара> <ауд> <предм> <препод> <группа>\n"
@@ -160,24 +157,27 @@ static Result processCommand(Database& db, UserID uid, const std::string& comman
             "  STATUS / CLEAR / EXIT");
     }
     else if (cmd == "STATUS") {
-        Result res(true, "Статистика");
-        fillTimeAndAudInfo(res, db);
-        return res;
+        size_t timeSlots = db.getTimes().size();
+        size_t auds = db.getAuditories().size();
+        return Result(true, "Слотов времени: " + std::to_string(timeSlots) +
+                         ", аудиторий: " + std::to_string(auds));
     }
     else if (cmd == "CLEAR") {
         db.getSessionManager().clearSelection(uid);
-        Result res(true, "Выборка очищена");
-        fillTimeAndAudInfo(res, db);
-        return res;
+        return Result(true, "Выборка очищена");
     }
     else if (cmd == "SAVE" || cmd == "LOAD") {
         std::string fname;
         iss >> fname;
         if (fname.empty()) return Result(false, "Укажите имя файла");
+
         bool ok = (cmd == "LOAD") ? db.loadFromFile(fname) : db.saveToFile(fname);
-        Result res(ok, ok ? "Успешно" : "Ошибка файла");
-        fillTimeAndAudInfo(res, db);
-        return res;
+        if (ok && cmd == "LOAD") {
+            size_t count = db.select(SearchConditions{}).size();
+            return Result(true, "Успешно загружено " + std::to_string(count) + " записей");
+        } else {
+            return Result(ok, ok ? "Успешно" : "Ошибка файла");
+        }
     }
     else if (cmd == "GENERATE") {
         std::string args;
@@ -190,14 +190,44 @@ static Result processCommand(Database& db, UserID uid, const std::string& comman
         return handleAdd(db, args);
     }
     else {
-        // Для SELECT, RESELECT, REMOVE, PRINT – используем parse
+        // Обработка PRINT с оператором == для TEACHER/SUBJECT
+        if (cmd == "PRINT") {
+            std::istringstream tmpIss(cmdLine);
+            std::string t, fieldTok, opTok, valTok;
+            tmpIss >> t;                // PRINT
+            if (tmpIss >> fieldTok) {
+                std::string upperField = toUpper(fieldTok);
+                if (upperField == "SELECT") {
+                    // PRINT SELECT – оставляем как есть
+                } else if (upperField == "TEACHER" || upperField == "SUBJECT") {
+                    if (tmpIss >> opTok) {
+                        if (opTok == "==") {
+                            if (tmpIss >> valTok) {
+                                // Собираем новую команду без оператора
+                                cmdLine = "PRINT " + fieldTok + " " + valTok;
+                            } else {
+                                return Result(false, "Ожидается значение после ==");
+                            }
+                        } else {
+                            return Result(false, "Поддерживается только оператор == для TEACHER/SUBJECT");
+                        }
+                    } else {
+                        return Result(false, "Ожидается == и значение после поля " + fieldTok);
+                    }
+                } else {
+                    return Result(false, "Поле \"" + fieldTok + "\" не поддерживается в PRINT. Используйте TEACHER или SUBJECT.");
+                }
+            }
+            // Если аргументов нет, parsed.fullOutput станет true
+        }
+
         Command parsed = parse(cmdLine);
         if (!parsed.valid) {
             return Result(false, parsed.errorMsg);
         }
 
         Result res(true, "");
-        // Выполняем команду без использования db.execute, чтобы контролировать вывод
+
         switch (parsed.cmd) {
             case SELECT: {
                 auto results = db.select(parsed.conditions);
@@ -205,8 +235,7 @@ static Result processCommand(Database& db, UserID uid, const std::string& comman
                 for (const auto& u : results)
                     positions.emplace_back(u.timeIndex, u.auditoryIndex);
                 db.getSessionManager().setSelection(uid, positions);
-                res.records = std::move(results);
-                res.message = "Выборка сохранена (" + std::to_string(res.records.size()) + " записей)";
+                res.message = "Выборка сохранена (" + std::to_string(results.size()) + " записей)";
                 break;
             }
             case RESELECT: {
@@ -221,8 +250,7 @@ static Result processCommand(Database& db, UserID uid, const std::string& comman
                     }
                 }
                 db.getSessionManager().setSelection(uid, filtered);
-                res.records = indicesToRecords(filtered, db);
-                res.message = "Перевыборка (" + std::to_string(res.records.size()) + " записей)";
+                res.message = "Перевыборка (" + std::to_string(filtered.size()) + " записей)";
                 break;
             }
             case REMOVE: {
@@ -239,28 +267,27 @@ static Result processCommand(Database& db, UserID uid, const std::string& comman
                     // PRINT SELECT
                     const auto& sel = db.getSessionManager().getSelection(uid);
                     if (sel.isEmpty()) {
-                        res.success = true;
-                        res.message = "Выборка пуста";
-                        fillTimeAndAudInfo(res, db);
-                        return res;
+                        Result emptyRes(true, "Выборка пуста");
+                        fillTimeAndAudInfo(emptyRes, db);
+                        return emptyRes;
                     }
                     recs = indicesToRecords(sel.selected_positions, db);
                 } else {
                     recs = db.select(parsed.conditions);
                 }
+
                 if (recs.empty() && !parsed.fullOutput) {
                     res.message = "Ничего не найдено";
                 } else {
-                    // Формируем матрицу или список? Для простоты возвращаем записи, клиент отобразит
                     res.records = std::move(recs);
                     res.message = "Найдено записей: " + std::to_string(res.records.size());
                 }
+                fillTimeAndAudInfo(res, db);
                 break;
             }
             default:
                 return Result(false, "Команда не поддерживается сервером");
         }
-        fillTimeAndAudInfo(res, db);
         return res;
     }
 }
