@@ -1,4 +1,3 @@
-// client.cpp
 #include "client_lib.h"
 #include <iostream>
 #include <sstream>

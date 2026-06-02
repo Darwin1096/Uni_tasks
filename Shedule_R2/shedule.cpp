@@ -1,4 +1,3 @@
-// shedule.cpp
 #include "shedule.h"
 #include <fstream>
 #include <sstream>

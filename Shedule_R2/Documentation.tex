@@ -1,0 +1,308 @@
+\documentclass[12pt,a4paper]{article}
+
+% Кодировка и языки
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[russian]{babel}
+
+% Геометрия страницы
+\usepackage[left=2.5cm, right=2.5cm, top=2.5cm, bottom=2.5cm]{geometry}
+
+% Для вставки кода/команд
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  rulecolor=\color{gray},
+  showstringspaces=false,
+  language=bash,
+  aboveskip=10pt,
+  belowskip=10pt
+}
+
+% Цвета для листингов
+\usepackage{xcolor}
+
+% Гиперссылки
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue
+}
+
+% Заголовок
+\title{Система управления расписанием\\[0.3em]
+\large Сетевая версия (TCP-сервер и клиент)}
+\author{Бобнев Д.В.}
+\date{\today}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+% ----------------------------------------------------------------
+\section{Руководство администратора}
+\label{sec:admin}
+
+\subsection{Системные требования}
+Для сборки и запуска сервера и клиента необходимы:
+\begin{itemize}
+  \item Операционная система Linux / macOS (Windows поддерживается через WSL).
+  \item Компилятор \texttt{g++} с поддержкой стандарта C++14 (или выше).
+  \item Библиотека POSIX threads (\texttt{pthread}) – обычно входит в стандартную установку.
+  \item Утилита \texttt{make} (опционально, для упрощения сборки).
+\end{itemize}
+
+\subsection{Состав дистрибутива}
+Исходный код включает следующие файлы:
+\begin{itemize}
+  \item \texttt{shedule.h} – заголовочный файл с основными структурами и классами.
+  \item \texttt{shedule.cpp} – реализация логики расписания (Database, парсер, match и др.).
+  \item \texttt{DataGeneration.cpp} – генератор тестовых данных.
+  \item \texttt{result.h}, \texttt{result.cpp} – класс Result, сериализация ответа.
+  \item \texttt{server.cpp} – серверная часть (приём TCP‑соединений, обработка команд).
+  \item \texttt{client\_lib.h}, \texttt{client\_lib.cpp} – библиотека клиента для подключения и отправки команд.
+  \item \texttt{client.cpp} – консольный клиент.
+\end{itemize}
+
+\subsection{Сборка и установка}
+
+\subsubsection{Сборка сервера}
+Откройте терминал в каталоге с исходниками и выполните:
+\begin{lstlisting}[language=bash]
+g++ -std=c++14 -pthread -Wall -Wextra -o server \
+  shedule.cpp result.cpp server.cpp DataGeneration.cpp
+\end{lstlisting}
+
+\subsubsection{Сборка клиента}
+\begin{lstlisting}[language=bash]
+g++ -std=c++14 -Wall -Wextra -o client \
+  shedule.cpp result.cpp client_lib.cpp client.cpp
+\end{lstlisting}
+
+При необходимости можно добавить ключ \texttt{-O2} для оптимизации.
+
+\subsection{Запуск и остановка}
+
+\paragraph{Запуск сервера}
+Сервер запускается из того же каталога, где находится файл данных \texttt{Data.txt} (или будет создан при первой генерации).
+\begin{lstlisting}[language=bash]
+./server
+\end{lstlisting}
+После запуска сервер начинает прослушивать TCP-порт 1234 и выводит сообщение о готовности.
+
+\paragraph{Запуск клиента}
+Клиент можно запускать на том же компьютере или удалённо, указав IP-адрес и порт (по умолчанию \texttt{127.0.0.1 1234}):
+\begin{lstlisting}[language=bash]
+./client [IP-адрес] [порт]
+\end{lstlisting}
+
+\paragraph{Остановка сервера}
+Рекомендуемый способ – нажать \texttt{Ctrl+C} в терминале, где работает сервер. Это вызовет корректное завершение с освобождением всех ресурсов.  
+Альтернативно можно отправить команду \texttt{SHUTDOWN} из клиента (если реализована), либо завершить процесс командой \texttt{killall server}.
+
+\paragraph{Генерация начальных данных}
+При первом запуске сервер пытается загрузить файл \texttt{Data.txt}. Если его нет, база будет пустой. Наполнить её можно командой \texttt{GENERATE} из клиента (см. \ref{sec:user}).
+
+\subsection{Рекомендации по развёртыванию}
+\begin{itemize}
+  \item Сервер и клиент должны иметь доступ к одному и тому же каталогу с \texttt{Data.txt} (если используется относительный путь).
+  \item Для многопользовательской работы сервер использует потоки; убедитесь, что в системе разрешено создание достаточного количества потоков.
+  \item При необходимости изменить порт – отредактируйте константу в \texttt{server.cpp} и \texttt{client.cpp}.
+\end{itemize}
+
+% ----------------------------------------------------------------
+\section{Руководство системного администратора}
+\label{sec:sysadmin}
+
+\subsection{Сетевой протокол}
+Обмен данными между клиентом и сервером осуществляется поверх TCP. Порт по умолчанию – 1234. После установки соединения клиент отправляет запрос, сервер обрабатывает его и возвращает ответ. Соединение может оставаться открытым для нескольких последовательных команд (сеанс).
+
+\subsection{Формат запроса (клиент $\rightarrow$ сервер)}
+Запрос состоит из двух частей:
+\begin{enumerate}
+  \item \textbf{Заголовок}: 4 байта (uint32\_t) – общая длина тела запроса, переданная в сетевом порядке байт (big-endian, функция \texttt{htonl}).
+  \item \textbf{Тело запроса}:
+  \begin{itemize}
+    \item 4 байта (uint32\_t) – идентификатор пользователя (UserID). Сервер может использовать это значение для сессий, но в актуальной реализации он заменяется на дескриптор сокета для уникальности.
+    \item 4 байта (uint32\_t) – длина текстовой команды (без завершающего нуля).
+    \item Последовательность байтов – текст команды в кодировке ASCII/UTF-8.
+  \end{itemize}
+\end{enumerate}
+
+Пример (псевдокод):
+\begin{lstlisting}[language=Python, caption=Пример формирования запроса]
+cmd = "PRINT TEACHER == T_2"
+uid = 1
+body = pack("!I", uid) + pack("!I", len(cmd)) + cmd.encode()
+header = pack("!I", len(body))
+send(header + body)
+\end{lstlisting}
+
+\subsection{Формат ответа (сервер $\rightarrow$ клиент)}
+Ответ также предваряется 4 байтами длины тела в big-endian. Тело ответа содержит сериализованный объект \texttt{Result} со следующими полями (порядок фиксирован):
+
+\begin{enumerate}
+  \item 1 байт – \texttt{success} (1 – успех, 0 – ошибка).
+  \item 4 байта (uint32\_t) – длина строки \texttt{message}, затем сама строка.
+  \item 4 байта (uint32\_t) – \texttt{affectedCount} (количество затронутых записей, например при REMOVE).
+  \item 4 байта (uint32\_t) – количество записей \texttt{recordsCount}, затем каждая запись:
+  \begin{itemize}
+    \item Строка \texttt{subject} (4 байта длина + данные).
+    \item Строка \texttt{teacher} (аналогично).
+    \item 4 байта (uint32\_t) – \texttt{group}.
+    \item 4 байта (uint32\_t) – \texttt{timeIndex}.
+    \item 4 байта (uint32\_t) – \texttt{auditoryIndex}.
+  \end{itemize}
+  \item 4 байта – \texttt{rows}, 4 байта – \texttt{cols} (размеры матрицы).
+  \item 4 байта – количество временных меток, затем каждая временная метка: строка в формате \texttt{"Weekday lesson\_num"} (например, \texttt{"Monday 1"}).
+  \item 4 байта – количество аудиторий, затем строки с названиями аудиторий.
+\end{enumerate}
+
+Все целочисленные поля кодируются в big-endian (\texttt{htonl} при отправке, \texttt{ntohl} при чтении).
+
+Строки передаются как последовательность: 4 байта длины + байты строки без завершающего нуля.
+
+\subsection{Поддерживаемые команды}
+Сервер поддерживает тот же набор команд, что и оригинальная консольная программа:
+\begin{itemize}
+  \item \texttt{SELECT <условия>} – выполнить поиск и сохранить выборку в сессию.
+  \item \texttt{RESELECT <условия>} – уточнить текущую выборку.
+  \item \texttt{PRINT} – показать полную матрицу расписания.
+  \item \texttt{PRINT SELECT} – показать текущую выборку в виде матрицы.
+  \item \texttt{PRINT TEACHER == <имя>} или \texttt{PRINT SUBJECT == <название>} – быстрый поиск с выводом матрицы.
+  \item \texttt{ADD <день> <пара> <аудитория> <предмет> <преподаватель> <группа>}
+  \item \texttt{REMOVE <условия>}
+  \item \texttt{SAVE <файл> / LOAD <файл>}
+  \item \texttt{GENERATE [параметры]} – генерация случайного расписания.
+  \item \texttt{STATUS}, \texttt{CLEAR}, \texttt{HELP}, \texttt{EXIT}.
+\end{itemize}
+Полный синтаксис условий описан в пользовательском руководстве (\ref{sec:user}).
+
+\subsection{Написание альтернативного клиента}
+Для создания клиента на любом языке необходимо:
+\begin{itemize}
+  \item Установить TCP‑соединение с сервером.
+  \item Реализовать описанную выше сериализацию запроса.
+  \item Читать ответ (сначала 4 байта длины, затем тело) и десериализовать \texttt{Result}.
+\end{itemize}
+Учёт порядка байт (big-endian) обязателен. Игнорирование этого требования приведёт к неверной интерпретации чисел на платформах с little-endian.
+
+% ----------------------------------------------------------------
+\section{Руководство пользователя}
+\label{sec:user}
+
+\subsection{Запуск клиента}
+После компиляции запустите клиент, указав при необходимости адрес и порт сервера:
+\begin{lstlisting}[language=bash]
+./client [server_ip] [port]
+\end{lstlisting}
+Если параметры опущены, используется \texttt{127.0.0.1} и порт \texttt{1234}. При успешном подключении появится приглашение \texttt{>}.
+
+\subsection{Общие правила ввода команд}
+\begin{itemize}
+  \item Команды регистронезависимы (можно писать \texttt{print}, \texttt{SELECT} и т.д.).
+  \item Параметры разделяются пробелами.
+  \item Дни недели указываются на английском с заглавной буквы (например, \texttt{Monday}, \texttt{Tuesday}). Сокращения не допускаются.
+  \item Числовые значения: номера уроков (1–6), группы, индексы.
+  \item Строковые значения можно заключать в кавычки, но не обязательно, если нет пробелов.
+\end{itemize}
+
+\subsection{Основные команды}
+
+\subsubsection{Просмотр расписания}
+\begin{itemize}
+  \item \texttt{PRINT} – выводит полную матрицу расписания. Строки – дни и пары, столбцы – аудитории. Ячейки содержат информацию о предмете, преподавателе и группе.
+  \item \texttt{PRINT SELECT} – выводит текущую выборку (результат последнего \texttt{SELECT} или \texttt{RESELECT}).
+  \item \texttt{PRINT TEACHER == <имя>} – выводит только те ячейки, где преподаватель совпадает с указанным. Например, \texttt{PRINT TEACHER == T\_2}.
+  \item \texttt{PRINT SUBJECT == <название>} – аналогично для предмета.
+\end{itemize}
+
+\subsubsection{Поиск и фильтрация}
+\begin{itemize}
+  \item \texttt{SELECT <условия>} – выполняет поиск записей по заданным условиям и сохраняет их в сессию. Примеры:
+  \begin{lstlisting}
+SELECT GROUP == 5
+SELECT TEACHER == T_3 AND DAY == Monday
+SELECT SUBJECT == S_10 AND LESSON_NUM >= 3
+  \end{lstlisting}
+  Операторы: \texttt{==}, \texttt{!=}, \texttt{<}, \texttt{>}, \texttt{<=}, \texttt{>=}, \texttt{CONTAINS} (для строковых полей). Поля: \texttt{GROUP}, \texttt{TEACHER}, \texttt{SUBJECT}, \texttt{AUDITORY}, \texttt{DAY}, \texttt{DATE}, \texttt{TIME}, \texttt{LESSON\_NUM}. Условия объединяются словом \texttt{AND}.
+  \item \texttt{RESELECT <условия>} – уточняет текущую выборку (применяет дополнительные условия). Если выборка пуста, ничего не делает.
+\end{itemize}
+
+\subsubsection{Добавление записи}
+\begin{lstlisting}
+ADD <день> <номер_пары> <аудитория> <предмет> <преподаватель> <группа>
+\end{lstlisting}
+Пример:
+\begin{lstlisting}
+ADD Tuesday 3 R_4 S_8 T_3 9
+\end{lstlisting}
+При конфликте (аудитория занята, преподаватель или группа уже имеют пару в это время) будет выведена ошибка «коллизия».
+
+\subsubsection{Удаление записей}
+\begin{lstlisting}
+REMOVE <условия>
+\end{lstlisting}
+Условия задаются так же, как в \texttt{SELECT}. Команда удаляет все записи, удовлетворяющие условиям. Пример:
+\begin{lstlisting}
+REMOVE DAY == Saturday AND LESSON_NUM == 3
+\end{lstlisting}
+
+\subsubsection{Работа с файлами}
+\begin{itemize}
+  \item \texttt{SAVE <имя\_файла>} – сохраняет текущее расписание в текстовый файл (формат такой же, как у \texttt{Data.txt}).
+  \item \texttt{LOAD <имя\_файла>} – загружает расписание из файла, полностью заменяя текущее содержимое базы.
+\end{itemize}
+
+\subsubsection{Генерация тестовых данных}
+\begin{lstlisting}
+GENERATE [уроков_в_день аудиторий групп преподавателей предметов заполненность]
+\end{lstlisting}
+Все параметры опциональны. Значения по умолчанию: 4 урока, 10 аудиторий, 10 групп, 8 преподавателей, 12 предметов, заполненность 0.6.  
+Пример для большой базы:
+\begin{lstlisting}
+GENERATE 6 50 500 1000 500 0.8
+\end{lstlisting}
+После генерации автоматически выполняется \texttt{LOAD Data.txt}.
+
+\subsubsection{Служебные команды}
+\begin{itemize}
+  \item \texttt{STATUS} – показывает количество временных слотов и аудиторий.
+  \item \texttt{CLEAR} – очищает текущую выборку (сессию).
+  \item \texttt{HELP} – выводит подсказку по командам.
+  \item \texttt{EXIT} – завершает сеанс клиента и закрывает соединение. Сервер при этом продолжает работу.
+\end{itemize}
+
+\subsection{Особенности и ограничения}
+\begin{itemize}
+  \item В командах \texttt{PRINT} с условием поддерживаются только поля \texttt{TEACHER} и \texttt{SUBJECT} и только оператор \texttt{==}. Остальные комбинации вызовут ошибку с пояснением.
+  \item Для \texttt{SELECT}, \texttt{RESELECT} и \texttt{REMOVE} операторы работают стандартно.
+  \item Результаты \texttt{PRINT} отображаются в виде матрицы. Если записей много, возможно, потребуется расширить окно терминала для корректного отображения.
+  \item Сессии разных клиентов изолированы друг от друга (каждый клиент имеет уникальный идентификатор сессии).
+\end{itemize}
+
+\subsection{Пример рабочей сессии}
+\begin{lstlisting}[language=bash]
+> GENERATE 6 50 500 1000 500 0.8
+Сгенерировано и загружено
+> STATUS
+Слотов времени: 36, аудиторий: 50
+> SELECT TEACHER == T_1
+Выборка сохранена (14 записей)
+> PRINT SELECT
+(выводится матрица с 14 заполненными ячейками)
+> ADD Monday 1 R_1 S_100 T_2 55
+Добавлено
+> PRINT TEACHER == T_2
+(матрица с парами T_2)
+> REMOVE GROUP == 55
+Удалено записей: 1
+> EXIT
+Сеанс завершён
+\end{lstlisting}
+
+\end{document}

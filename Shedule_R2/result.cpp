@@ -1,4 +1,3 @@
-// result.cpp
 #include "result.h"
 #include <arpa/inet.h>
 #include <cstring>

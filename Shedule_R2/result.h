@@ -1,4 +1,3 @@
-// result.h
 #ifndef RESULT_H
 #define RESULT_H
 

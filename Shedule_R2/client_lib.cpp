@@ -1,4 +1,3 @@
-// client_lib.cpp
 #include "client_lib.h"
 #include <sys/socket.h>
 #include <netinet/in.h>

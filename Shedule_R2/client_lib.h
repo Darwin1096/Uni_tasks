@@ -1,4 +1,3 @@
-// client_lib.h
 #ifndef CLIENT_LIB_H
 #define CLIENT_LIB_H
 

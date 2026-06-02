@@ -1,6 +1,7 @@
-// server.cpp
 #include "shedule.h"
 #include "result.h"
+#include <thread>
+#include <mutex>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -223,6 +224,12 @@ static Result processCommand(Database& db, UserID uid, const std::string& comman
 
         Command parsed = parse(cmdLine);
         if (!parsed.valid) {
+            // Если команда REMOVE введена неправильно — даём подсказку
+            if (cmd == "REMOVE") {
+                return Result(false, 
+                    "Неверный формат REMOVE. Используйте условия с операторами.\n"
+                    "Пример: REMOVE DAY == Saturday AND LESSON_NUM == 3 AND SUBJECT == S_6 AND TEACHER == T_8 AND GROUP == 10");
+            }
             return Result(false, parsed.errorMsg);
         }
 
@@ -292,6 +299,8 @@ static Result processCommand(Database& db, UserID uid, const std::string& comman
     }
 }
 
+std::mutex db_mutex;   
+
 int main() {
     Database db;
     if (!db.loadFromFile("Data.txt")) {
@@ -321,17 +330,15 @@ int main() {
         return 1;
     }
 
-    if (listen(server_fd, 5) < 0) {
+    if (listen(server_fd, 10) < 0) {   // очередь побольше, т.к. многопоточно
         std::cerr << "Ошибка listen\n";
         close(server_fd);
         return 1;
     }
 
-    std::cout << "Сервер запущен на порту 1234\n";
+    std::cout << "Сервер запущен на порту 1234 (многопоточный режим)\n";
 
-    bool stopServer = false;
-
-    while (!stopServer) {
+    while (true) {
         struct sockaddr_in client_addr;
         socklen_t client_len = sizeof(client_addr);
         int client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &client_len);
@@ -340,59 +347,67 @@ int main() {
             continue;
         }
 
-        std::cout << "Подключился клиент\n";
+        // Запускаем поток для обслуживания клиента
+        std::thread client_thread([client_fd, &db]() {
+            std::cout << "Подключился клиент (fd=" << client_fd << ")\n";
 
-        // Цикл обработки команд от данного клиента
-        while (true) {
-            // 1. Читаем длину сообщения
-            uint32_t msg_len_net;
-            if (!readFull(client_fd, &msg_len_net, sizeof(msg_len_net))) {
-                std::cout << "Клиент отключился или ошибка чтения длины\n";
-                break;  // выходим из цикла команд
+            while (true) {
+                // Читаем длину сообщения
+                uint32_t msg_len_net;
+                if (!readFull(client_fd, &msg_len_net, sizeof(msg_len_net))) {
+                    std::cout << "Клиент fd=" << client_fd << " отключился\n";
+                    break;
+                }
+                uint32_t msg_len = ntohl(msg_len_net);
+                if (msg_len > 1024 * 1024) {
+                    std::cerr << "Слишком длинное сообщение от клиента fd=" << client_fd << "\n";
+                    break;
+                }
+
+                std::vector<uint8_t> body(msg_len);
+                if (!readFull(client_fd, body.data(), msg_len)) {
+                    std::cerr << "Ошибка чтения тела запроса от клиента fd=" << client_fd << "\n";
+                    break;
+                }
+
+                const uint8_t* ptr = body.data();
+                size_t offset = 0;
+                // Игнорируем присланный клиентом uid, используем дескриптор сокета как ID сессии
+                offset += 4;   // пропускаем 4 байта uid, не читая их
+                UserID uid = static_cast<UserID>(client_fd);
+
+                uint32_t cmd_len_net;
+                std::memcpy(&cmd_len_net, ptr + offset, sizeof(cmd_len_net)); offset += 4;
+                uint32_t cmd_len = ntohl(cmd_len_net);
+                std::string command(reinterpret_cast<const char*>(ptr + offset), cmd_len);
+
+                std::cout << "Клиент fd=" << client_fd << " user=" << uid
+                          << " команда: " << command << std::endl;
+
+                // Обработка EXIT
+                std::string upperCmd = toUpper(trim(command));
+                if (upperCmd == "EXIT") {
+                    Result exitRes(true, "Сеанс завершён");
+                    // Блокировка не нужна для отправки, только для чтения ответа
+                    sendResponse(client_fd, exitRes);
+                    break;
+                }
+
+                // Синхронизируем доступ к базе данных
+                Result res;
+                {
+                    std::lock_guard<std::mutex> lock(db_mutex);
+                    res = processCommand(db, uid, command);
+                }
+                sendResponse(client_fd, res);
             }
-            uint32_t msg_len = ntohl(msg_len_net);
-            if (msg_len > 1024 * 1024) {
-                std::cerr << "Слишком длинное сообщение\n";
-                break;
-            }
 
-            // 2. Читаем тело запроса
-            std::vector<uint8_t> body(msg_len);
-            if (!readFull(client_fd, body.data(), msg_len)) {
-                std::cerr << "Ошибка чтения тела запроса\n";
-                break;
-            }
+            close(client_fd);
+            std::cout << "Клиент fd=" << client_fd << " полностью обслужен\n";
+        });
 
-            // 3. Разбираем UserID и команду
-            const uint8_t* ptr = body.data();
-            size_t offset = 0;
-            uint32_t uid_net;
-            std::memcpy(&uid_net, ptr + offset, sizeof(uid_net)); offset += 4;
-            UserID uid = ntohl(uid_net);
-
-            uint32_t cmd_len_net;
-            std::memcpy(&cmd_len_net, ptr + offset, sizeof(cmd_len_net)); offset += 4;
-            uint32_t cmd_len = ntohl(cmd_len_net);
-            std::string command(reinterpret_cast<const char*>(ptr + offset), cmd_len);
-
-            std::cout << "Получена команда от пользователя " << uid << ": " << command << std::endl;
-
-            // 4. Обработка EXIT
-            std::string upperCmd = toUpper(trim(command));
-            if (upperCmd == "EXIT") {
-                Result exitRes(true, "Сервер завершает работу");
-                sendResponse(client_fd, exitRes);
-                stopServer = true;
-                break;  // выходим из цикла команд
-            }
-
-            // 5. Выполняем команду
-            Result res = processCommand(db, uid, command);
-            sendResponse(client_fd, res);
-        }
-
-        close(client_fd);
-        std::cout << "Соединение с клиентом закрыто\n";
+        // Отсоединяем поток, чтобы он работал самостоятельно
+        client_thread.detach();
     }
 
     close(server_fd);

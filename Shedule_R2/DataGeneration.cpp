@@ -4,6 +4,7 @@
 #include <random>
 #include <vector>
 #include <string>
+#include <set>
 
 void generateTestData(int numLessonsPerDay,
                       int numAuditories,
@@ -22,7 +23,6 @@ void generateTestData(int numLessonsPerDay,
         "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
     };
     
-    // Списки преподавателей, предметов, аудиторий, групп
     std::vector<std::string> teachers;
     for (int i = 1; i <= numTeachers; ++i)
         teachers.push_back("T_" + std::to_string(i));
@@ -39,7 +39,6 @@ void generateTestData(int numLessonsPerDay,
     for (int i = 1; i <= numGroups; ++i)
         groups.push_back(i);
     
-    // Генератор случайных чисел
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<> occupancyDist(0.0, 1.0);
@@ -47,34 +46,46 @@ void generateTestData(int numLessonsPerDay,
     std::uniform_int_distribution<> subjectDist(0, numSubjects - 1);
     std::uniform_int_distribution<> auditoryDist(0, numAuditories - 1);
     std::uniform_int_distribution<> groupDist(0, numGroups - 1);
-    
+
+    // Множество для отслеживания уже занятых слотов (день, урок, аудитория)
+    std::set<std::tuple<std::string, int, std::string>> usedSlots;
+
     int totalLessons = 0;
+    int maxPossible = weekdays.size() * numLessonsPerDay * numAuditories;
+
     for (const auto& weekday : weekdays) {
         for (int lesson = 1; lesson <= numLessonsPerDay; ++lesson) {
-            // Пропускаем с вероятностью (1 - occupancyRate)
-            if (occupancyDist(gen) > occupancyRate)
-                continue;
-            
-            std::string teacher = teachers[teacherDist(gen)];
-            std::string subject = subjects[subjectDist(gen)];
-            std::string auditory = auditories[auditoryDist(gen)];
-            int group = groups[groupDist(gen)];
-            
-            outFile << weekday << " "
-                    << lesson << " "
-                    << auditory << " "
-                    << subject << " "
-                    << teacher << " "
-                    << group << "\n";
-            totalLessons++;
+            for (const auto& auditory : auditories) {
+                // Пропускаем с вероятностью (1 - occupancyRate)
+                if (occupancyDist(gen) > occupancyRate)
+                    continue;
+
+                // Если слот уже занят (на всякий случай), пропускаем
+                if (usedSlots.count({weekday, lesson, auditory}) > 0)
+                    continue;
+
+                std::string teacher = teachers[teacherDist(gen)];
+                std::string subject = subjects[subjectDist(gen)];
+                int group = groups[groupDist(gen)];
+
+                outFile << weekday << " "
+                        << lesson << " "
+                        << auditory << " "
+                        << subject << " "
+                        << teacher << " "
+                        << group << "\n";
+
+                usedSlots.insert({weekday, lesson, auditory});
+                totalLessons++;
+            }
         }
     }
     
     outFile.close();
     std::cout << "Тестовые данные успешно сгенерированы в файл: " << filename << std::endl;
-    std::cout << "Всего сгенерировано пар: " << totalLessons << " из "
-              << (weekdays.size() * numLessonsPerDay) << " возможных\n";
+    std::cout << "Всего сгенерировано уникальных записей: " << totalLessons
+              << " из " << maxPossible << " возможных слотов\n";
     std::cout << "Заполненность: " 
-              << (totalLessons * 100.0 / (weekdays.size() * numLessonsPerDay)) << "%\n";
+              << (totalLessons * 100.0 / maxPossible) << "%\n";
     std::cout << "Формат: день_недели урок аудитория предмет преподаватель группа\n";
 }
