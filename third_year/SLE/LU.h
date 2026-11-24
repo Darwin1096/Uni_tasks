@@ -1,5 +1,5 @@
 int solve_lu(int n, double *A, double *b, double *x);
-void print_matrix(int m, int n, double *mat);
+void print_matrix(int l, int n, int m, double *mat);
 int read_matrix(const char *filename, int n, double *A);
 void init_matrix_formula(int n, int k, double *A);
 void build_b(int n, double *A, double *b);

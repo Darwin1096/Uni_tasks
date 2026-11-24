@@ -6,10 +6,12 @@
 
 
 
-void print_matrix(int m, int n, double *mat){
-    for (int i = 0; i < m; ++i) {
-        for (int j = 0; j < n; ++j) {
-            printf(" %10.3e", mat[i * m + j]);
+void print_matrix(int l, int n, int m, double *mat){
+    int rows = (l < m) ? l : m;
+    int cols = (n < m) ? n : m;
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            printf(" %10.3e", mat[i * n + j]);
         }
         printf("\n");
     }
@@ -69,17 +71,17 @@ int main(int argc, char **argv){
     build_b(n, A, b);
 
     printf("Matrix A:\n");
-    print_matrix(m, n, A);
+    print_matrix(n, n, m, A);
 
     printf("Vector b:\n");
-    print_matrix(1, n, b);
+    print_matrix(1, n, m, b);
 
     clock_t start = clock();
     int res = solve_lu(n, A, b, x);
     clock_t end = clock();
 
     if (res != 0){
-        printf("Error, decomposition failed, maybe matrix is singuar or LU-decomposition can't be applied \n");
+        printf("Error, decomposition failed, maybe matrix is singular or LU-decomposition can't be applied \n");
         free(A); free(b); free(x);
         return 1;
     }
@@ -87,7 +89,7 @@ int main(int argc, char **argv){
     double time_spent = (double)(end - start) / CLOCKS_PER_SEC;
 
     printf("Solution x:\n");
-    print_matrix(1, n, x);
+    print_matrix(1, n, m, x);
 
 
     int finite_x = 1;
